@@ -1,0 +1,224 @@
+import tensorflow as tf
+import itertools
+import keras
+import pandas as pd
+import torch.utils.data as data_utils
+import numpy as np
+from Data_Preprocessing import *
+from MSE import *
+import matplotlib.pyplot as plt
+from Plot import *
+from Test import *
+
+
+save = True
+
+# Loading data 
+Training_u = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/u_training.csv')
+Training_n = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/n_training.csv')
+Training_T = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/t_training.csv')
+
+Test_u = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/u_test.csv')
+Test_n = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/n_test.csv')
+Test_T = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/t_test.csv')
+
+# Creating dataloader for training 
+
+train_dataset = data_utils.TensorDataset(Training_T, Training_u, Training_n)
+train_dataloader = data_utils.DataLoader(train_dataset,batch_size=500,shuffle=True)
+
+train_dataloader1 = data_utils.DataLoader(train_dataset,batch_size=1,shuffle=False)
+
+test_dataset = data_utils.TensorDataset(Test_T, Test_u, Test_n)
+test_dataloader = data_utils.DataLoader(test_dataset,batch_size=1,shuffle=False)
+
+
+
+# initializer = tf.keras.initializers.GlorotNormal()
+# def init_model(num_hidden_layers=8, num_neurons_per_layer=20):
+#     # Initialize a feedforward neural network
+#     model = tf.keras.Sequential()
+
+#     # Input is two-dimensional (time + one spatial dimension)
+#     model.add(tf.keras.Input(2))
+
+#     # Append hidden layers
+#     for i in range(num_hidden_layers):
+#         if i % 2 == 1:
+#             model.add(tf.keras.layers.Dense(num_neurons_per_layer,
+#                 activation=tf.nn.tanh,
+#                 kernel_initializer = initializer))
+#         else:
+#             model.add(tf.keras.layers.Dense(num_neurons_per_layer,
+#                 activation=tf.nn.relu,
+#                 kernel_initializer = initializer))
+
+#     # Output is one-dimensional
+#     model.add(tf.keras.layers.Dense(1))
+    
+#     return model
+
+initializer = tf.keras.initializers.GlorotNormal()
+
+# NN for U
+input_u = tf.keras.Input(shape=(1))
+
+n_u = tf.keras.Sequential(
+
+    [
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(1, kernel_initializer=initializer)
+    ]
+)
+
+x = n_u(input_u)
+
+net_u = tf.keras.Model(inputs = input_u, outputs = x)
+
+
+# NN for N
+input_n = tf.keras.Input(shape=(1))
+    
+n_n = tf.keras.Sequential(
+
+    [
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(20, activation=tf.nn.tanh,kernel_initializer=initializer),tf.keras.layers.Dense(20, activation=tf.nn.relu,kernel_initializer=initializer),
+        tf.keras.layers.Dense(1,kernel_initializer=initializer)
+    ]
+)
+
+y = n_n(input_n)
+
+net_n = tf.keras.Model(inputs = input_n, outputs = y)
+
+# Save the arrays
+# Predict before training
+Utrain_before = []
+Ntrain_before = []
+Utest_before = []
+Ntest_before = []
+
+Test(test_dataloader, Utest_before, Ntest_before, net_u, net_n) 
+Test(train_dataloader1, Utrain_before, Ntrain_before, net_u, net_n) 
+
+if save:
+    np.savetxt('./Results/Utrain_before.csv', Utrain_before, delimiter=',')
+    np.savetxt('./Results/Utest_before.csv', Utest_before, delimiter=',')
+    np.savetxt('./Results/Ntrain_before.csv', Ntrain_before, delimiter=',')
+    np.savetxt('./Results/Ntest_before.csv', Ntest_before, delimiter=',')
+
+
+# Training Neural Network 
+criterion = MSE(net_u, net_n)
+optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-4)
+
+output_array_train_u = []
+output_array_train_n = []
+output_array_test_u = []
+output_array_test_n = []
+
+loss_array_train = []
+loss_array_U = []
+loss_array_N = []
+loss_array_IC = []
+loss_array_R = []
+
+epochs = 10000
+
+
+    # Gradient function
+def grad(model_u, model_n, inputs, label_u, label_n):
+    with tf.GradientTape(persistent=True) as tape:
+        loss_val = criterion.call(inputs, label_u, label_n)
+    return loss_val, tape.gradient(loss_val, model_u.trainable_variables), tape.gradient(loss_val, model_n.trainable_variables)
+
+
+for epoch in range(epochs):  # loop over the dataset multiple times
+        
+    current_loss_array_train = []
+    current_loss_array_trainU = []
+    current_loss_array_trainN = []
+    current_loss_array_trainIC = []
+    current_loss_array_trainR = []
+    
+        
+    for i, data in enumerate(train_dataloader):
+       
+        # get the inputs; data is a list of [inputs, labels]
+       
+        inputs, label_u, label_n = data
+   
+        # zero the parameter gradients
+       
+        inputs = tf.convert_to_tensor(inputs.numpy())
+        label_u = tf.convert_to_tensor(label_u.numpy())
+        label_n = tf.convert_to_tensor(label_n.numpy())
+        
+        output_u = net_u(inputs)
+        output_n = net_n(inputs)
+              
+        
+        loss, grads_u, grads_n = grad(net_u, net_n, inputs, label_u, label_n)
+        lossU = criterion.lossU()
+        lossN = criterion.lossN()
+        
+        # Calculate metrics
+
+        current_loss_array_train.append(loss.numpy())
+        current_loss_array_trainU.append(criterion.lossU().numpy())
+        current_loss_array_trainN.append(criterion.lossN().numpy())
+        current_loss_array_trainIC.append(criterion.lossIC().numpy())
+        current_loss_array_trainR.append(criterion.lossR().numpy())
+        
+         # forward + backward + optimize
+        var_list_u = net_u.trainable_variables
+        var_list_n = net_n.trainable_variables
+
+        optimizer.apply_gradients(zip(grads_u, var_list_u))
+        optimizer.apply_gradients(zip(grads_n, var_list_n))
+    
+    print('Epoch: ',epoch,' Loss: ',round(np.mean(current_loss_array_train),3), ' U: ', round(np.mean(current_loss_array_trainU),3), ' N: ', round(np.mean(current_loss_array_trainN),3), ' IC: ', round(np.mean(current_loss_array_trainIC), 6), ' R: ', round(np.mean(current_loss_array_trainR), 3))
+    #, ' Loss U: ', np.mean(current_loss_array_trainU),' Loss N: ', np.mean(current_loss_array_trainN))
+    loss_array_train.append(np.mean(current_loss_array_train))   
+    loss_array_U.append(np.mean(current_loss_array_trainU))
+    loss_array_N.append(np.mean(current_loss_array_trainN))
+    loss_array_IC.append(np.mean(current_loss_array_trainIC))
+    loss_array_R.append(np.mean(current_loss_array_trainR))
+    l = np.mean(current_loss_array_train)
+
+    # Testing the Neural Network
+# np.savetxt('loss.csv', loss_array_train, delimiter=',')
+# net_n.save("net_n")
+# net_u.save("net_u")
+
+
+Test(test_dataloader, output_array_test_u, output_array_test_n, net_u, net_n) 
+Test(train_dataloader1, output_array_train_u, output_array_train_n, net_u, net_n) 
+
+if save:
+    np.savetxt('./Results/Loss.csv', loss_array_train, delimiter=',')
+    np.savetxt('./Results/Utrain.csv', output_array_train_u, delimiter=',')
+    np.savetxt('./Results/Utest.csv', output_array_test_u, delimiter=',')
+    np.savetxt('./Results/Ntrain.csv', output_array_train_n, delimiter=',')
+    np.savetxt('./Results/Ntest.csv', output_array_test_n, delimiter=',')
+
+
+# Plot the results
+plt.figure()
+Plot_Expectation(Training_T, Training_u, output_array_train_u, 'U', epoch)
+plt.figure()
+Plot_Expectation(Training_T, Training_n, output_array_train_n, 'N', epoch)
+
+plt.figure()
+Plot_Expectation(Test_T, Test_u, output_array_test_u, 'U', epoch)
+plt.figure()
+Plot_Expectation(Test_T, Test_n, output_array_test_n, 'N', epoch)
+
+plt.figure()
+Plot_Loss(loss_array_train, 'U & N', epochs)
