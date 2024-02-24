@@ -1,0 +1,331 @@
+"""
+A Prerequisite is to install the torchdiffeq Module using:
+    
+    pip install torchdiffeq
+"""
+
+## IMPORT LIBRARIES
+
+import os
+
+import argparse # Used to parse arguments - Make the definition of the arguments of a certain function user friendly
+
+import time # Used to get the current time & Handle time parameters in general
+
+import numpy as np
+
+import torch
+
+import torch.nn as nn
+
+import torch.optim as optim
+
+
+## DEFINE THE ARGUMENTS NEEDED TO BE PROVIDED BY THE USER
+
+parser = argparse.ArgumentParser('ODE demo') # Name of the arguments needed
+
+parser.add_argument('--method', type=str, choices=['dopri5', 'adams'], default='dopri5') # Method used to solve the ODE, with dopri5 the Adapative RK5 of Dormand-Prince-Shampine
+
+parser.add_argument('--data_size', type=int, default=1000) # Data size
+
+parser.add_argument('--batch_time', type=int, default=10) # Number of elements to take to create a time batch
+
+parser.add_argument('--batch_size', type=int, default=20) # Batch size
+
+parser.add_argument('--niters', type=int, default=2000) # Number of epochs
+
+parser.add_argument('--test_freq', type=int, default=20)
+
+parser.add_argument('--viz', action = 'store_true') # Keep track of training progress 
+
+parser.add_argument('--gpu', type=int, default=0) # Use of GPU
+
+parser.add_argument('--adjoint', action='store_true') # Use of Adjoint
+
+args = parser.parse_args() # Store the attributes of the parser in the variable args
+
+
+## DEFINE IF WE USE ADJOINTS OR NOT IN SOLVING
+
+if args.adjoint:
+    
+    from torchdiffeq import odeint_adjoint as odeint
+    
+else:
+    
+    from torchdiffeq import odeint
+
+
+## DEFINE THE DEVICE TO USE - CPU // GPU
+
+device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
+
+
+## DEFINE THE INTITIAL CONDITIONS
+
+true_y0 = torch.tensor([[2., 0.]]).to(device) # Initial conditions - Initial point on the 2D matrix
+
+t = torch.linspace(0., 25., args.data_size).to(device) # Time range for computation, between 0 and 25 with Dara_size points in between
+
+true_A = torch.tensor([[-0.1, 2.0], [-2.0, -0.1]]).to(device)
+
+
+## TRUE ODE FUNCTION PROUCING THE SPIRAL - dy/dt = Lambda(y,t)
+
+class Lambda(nn.Module):
+
+    def forward(self, t, y):
+        
+        return torch.mm(y**3, true_A) # Matrix multiplication of y^3 and True A
+
+
+## COMPUTE THE TRUE SPIRAL VALUES
+
+with torch.no_grad(): # Compute without gradient descent
+    
+    true_y = odeint(Lambda(), true_y0, t, method='dopri5') # Take as an imput the function, the initial condition, the time array and the method
+
+
+## CREATE BATCHES FOR TRIANING
+
+def get_batch():
+    
+    s = torch.from_numpy(np.random.choice(np.arange(args.data_size - args.batch_time, dtype=np.int64), args.batch_size, replace=False)) # Get a torch array 1 x batch size with numbers sampled from another array 1 x data_size - batch_time 
+    
+    batch_y0 = true_y[s]  # Get a tensor array with different initial conditions of size batch size, sampled as s  
+    
+    batch_t = t[:args.batch_time]  # Always take the first batch_time values to train the model
+    
+    batch_y = torch.stack([true_y[s + i] for i in range(args.batch_time)], dim=0)  # Get the true values for time batch_time for each different initial condition
+    
+    return batch_y0.to(device), batch_t.to(device), batch_y.to(device)
+
+
+## CREATE A DIRECTORY IF IT DOESN'T E
+
+def makedirs(dirname):
+    
+    if not os.path.exists(dirname):
+        
+        os.makedirs(dirname)
+
+
+## PREPARE THE PLOT FOR KEEPING TRACK OF TRAINING PROGRESSES
+
+if args.viz:
+    
+    makedirs('png') # Create a directory to store the images
+    
+    import matplotlib.pyplot as plt
+    
+    fig = plt.figure(figsize=(12, 4), facecolor='white') # Create a figure with 3 Subplots
+    
+    ax_traj = fig.add_subplot(131, frameon=False)
+    
+    ax_phase = fig.add_subplot(132, frameon=False)
+    
+    ax_vecfield = fig.add_subplot(133, frameon=False)
+    
+    plt.show(block=False)
+
+
+## PLOT THE TRAINING PROGRESSES
+
+def visualize(true_y, pred_y, odefunc, itr):
+
+    if args.viz:
+
+            # Plot the x & y trajectories of training
+        
+        ax_traj.cla() # Clear the axes
+        
+        ax_traj.set_title('Trajectories') # Set a title to the plot
+        
+        ax_traj.set_xlabel('t') # Set the labels for the axes
+        
+        ax_traj.set_ylabel('x,y') # Set the labels for the axes
+        
+        ax_traj.plot(t.cpu().numpy(), true_y.cpu().numpy()[:, 0, 0], t.cpu().numpy(), true_y.cpu().numpy()[:, 0, 1], 'g-') # Plot the true x & y trajectories
+        
+        ax_traj.plot(t.cpu().numpy(), pred_y.cpu().numpy()[:, 0, 0], '--', t.cpu().numpy(), pred_y.cpu().numpy()[:, 0, 1], 'b--') # Plot the predicted x and y trajectories
+        
+        ax_traj.set_xlim(t.cpu().min(), t.cpu().max()) # Set the limits of axes
+        
+        ax_traj.set_ylim(-2, 2) # Set the limits of axes
+        
+        ax_traj.legend() # Show the legends
+        
+            
+            # Plot the Phase
+            
+        ax_phase.cla() # Clear the axes
+        
+        ax_phase.set_title('Phase Portrait') # Add the title to the plot
+        
+        ax_phase.set_xlabel('x') # Set the labels for the axes
+        
+        ax_phase.set_ylabel('y') # set the labels for the axes
+        
+        ax_phase.plot(true_y.cpu().numpy()[:, 0, 0], true_y.cpu().numpy()[:, 0, 1], 'g-') # Plot the true phase
+        
+        ax_phase.plot(pred_y.cpu().numpy()[:, 0, 0], pred_y.cpu().numpy()[:, 0, 1], 'b--') # Plot the predicted phase
+        
+        ax_phase.set_xlim(-2, 2) # Set the limits for the axes
+        
+        ax_phase.set_ylim(-2, 2) # Set the limits for the axes
+        
+        
+            # Plot the vector field
+            
+        ax_vecfield.cla() # Clear the axes
+        
+        ax_vecfield.set_title('Learned Vector Field') # Add the title of the plot
+        
+        ax_vecfield.set_xlabel('x') # Set axes label
+        
+        ax_vecfield.set_ylabel('y') # Set axes label
+        
+
+        y, x = np.mgrid[-2:2:21j, -2:2:21j] # Define a 2d grid from -2 to 2
+        
+        dydt = odefunc(0, torch.Tensor(np.stack([x, y], -1).reshape(21 * 21, 2)).to(device)).cpu().detach().numpy() # Compute the gradients for different points on the grid
+        
+        mag = np.sqrt(dydt[:, 0]**2 + dydt[:, 1]**2).reshape(-1, 1) # Compute the magnitude of each gradient
+        
+        dydt = (dydt / mag) # Normalise the gradients
+        
+        dydt = dydt.reshape(21, 21, 2) # Reshape the truple in a specified format
+        
+
+        ax_vecfield.streamplot(x, y, dydt[:, :, 0], dydt[:, :, 1], color="black") # Plot the vector field
+        
+        ax_vecfield.set_xlim(-2, 2) # Set the limits
+        
+        ax_vecfield.set_ylim(-2, 2) # Set the limits
+        
+            
+            # Save the plots
+
+        fig.tight_layout()
+        
+        plt.savefig('png/{:03d}'.format(itr))
+        
+        plt.draw()
+        
+        plt.pause(0.001)
+        
+
+## NEURAL NETWORK MODEL USED TO GET THE PREDICTED SPIRAL WAVE
+
+class ODEFunc(nn.Module):
+
+    def __init__(self):
+        
+        super(ODEFunc, self).__init__()
+
+        self.net = nn.Sequential( # Neural Network - 2x50 - TanH - 50x2
+            
+            nn.Linear(2, 50), 
+            
+            nn.Tanh(),
+            
+            nn.Linear(50, 2),
+        )
+
+        for m in self.net.modules():
+            
+            if isinstance(m, nn.Linear):
+                
+                nn.init.normal_(m.weight, mean=0, std=0.1) # Initialise the weights of the linear layers as normal
+                
+                nn.init.constant_(m.bias, val=0) # Intialise the bias of the linear layers with 0
+
+    def forward(self, t, y):
+        
+        return self.net(y**3) # Return the prediction of the derivative dy/dt with input y^3
+
+
+## COMPUTE AND STORE THE AVERAGE AND CURRENT VALUE
+
+class RunningAverageMeter(object):
+
+    def __init__(self, momentum=0.99):
+        
+        self.momentum = momentum
+        
+        self.reset()
+
+    def reset(self):
+        
+        self.val = None
+        
+        self.avg = 0
+
+    def update(self, val):
+        
+        if self.val is None:
+            
+            self.avg = val # If no value, average is None
+            
+        else:
+            
+            self.avg = self.avg * self.momentum + val * (1 - self.momentum) # Compute the updated average with the new value
+            
+        self.val = val
+
+
+## MAIN CODE TO BE RUN
+
+if __name__ == '__main__':
+
+    ii = 0
+
+    func = ODEFunc().to(device) # ODE Function = Neural Network = dy/dt
+    
+    optimizer = optim.RMSprop(func.parameters(), lr=1e-3) # Parameters optimiser
+    
+    end = time.time() # Return the current time
+
+
+    time_meter = RunningAverageMeter(0.97) # Initialise the Time average
+    
+    
+    loss_meter = RunningAverageMeter(0.97) # Initialise the Loss average
+
+
+    for itr in range(1, args.niters + 1): # Run through each epoch
+        
+        optimizer.zero_grad() # Initialise the gradients to 0
+        
+        batch_y0, batch_t, batch_y = get_batch() # Create a batch
+        
+        pred_y = odeint(func, batch_y0, batch_t).to(device) # Compute the predicted Y
+        
+        loss = torch.mean(torch.abs(pred_y - batch_y)) # Compute the Loss using the Mean Absolute Error
+        
+        loss.backward() # Backpropagate
+        
+        optimizer.step() # Update the parameters
+
+
+        time_meter.update(time.time() - end) # Compute the new mean time to run the epoch
+        
+        loss_meter.update(loss.item()) # Update the new updated mean loss
+
+            # At certain values, ompute the predicted spiral and save the predictions over the training time 
+        if itr % args.test_freq == 0:
+            
+            with torch.no_grad(): # Compute without gradient descent
+                
+                pred_y = odeint(func, true_y0, t) # Get the predicted spiral wave with the current trained model
+                
+                loss = torch.mean(torch.abs(pred_y - true_y)) # Compute the current loss over the whole spiral
+                
+                print('Iter {:04d} | Total Loss {:.6f}'.format(itr, loss.item())) # Print the Epoch number and current loss
+                
+                visualize(true_y, pred_y, func, ii) # Save the plots of trajectories, phase and vector field
+                
+                ii += 1 # Add 1 to the count of figures
+
+        end = time.time() # Return the current time
