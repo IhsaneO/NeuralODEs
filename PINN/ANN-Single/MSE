@@ -1,0 +1,89 @@
+import tensorflow as tf
+import numpy as np
+
+class MSE():
+    """
+    Mean squared error loss.
+    """
+    
+    def __init__(self, model_u, model_n):
+        
+        self.model_u = model_u
+        self.model_n = model_n        
+        
+    def call(self, t, u_true, n_true):
+                
+        def u(self, t):
+            return self.model_u(t)
+        
+        
+        def n(self, t):
+            return self.model_n(t)
+                
+        
+        def r_u(self, t):
+            
+            with tf.GradientTape(persistent=True) as g:
+                g.watch(t)
+                u_pred = u(self, t)
+                
+            with tf.GradientTape(persistent=True) as y:
+                y.watch(t)
+                n_pred = n(self, t)
+                
+            u_t = g.gradient(u_pred, t)[0]
+            
+            f = 8.0 * u_pred * (u_pred - 0.1) * (u_pred - 1) 
+            
+            return u_t + f + n_pred
+
+
+        def r_n(self, t):
+            
+            with tf.GradientTape() as g:
+                g.watch(t)
+                u_pred = u(self, t)
+                
+            with tf.GradientTape() as y:
+                y.watch(t)
+                n_pred = n(self, t)
+                
+            n_t = y.gradient(n_pred, t)[0]
+            
+            f = 0.02 * (5.0 * u_pred - n_pred)
+            
+            return n_t - f
+
+
+        def ic_1(self):
+            u_0 = u(self, tf.convert_to_tensor([0.0]))
+
+            return (u_0 - 0.5)
+
+        
+        def ic_2(self):
+            
+            return n(self, tf.convert_to_tensor([0.0]))
+       
+        
+        self.MSE_rn = tf.reduce_mean(tf.square(r_n(self, t)))
+        self.MSE_ru = tf.reduce_mean(tf.square(r_u(self, t)))
+        self.MSE_u = tf.reduce_mean(tf.square((u_true - u(self, t))))
+        self.MSE_n = tf.reduce_mean(tf.square((n_true - n(self, t))))
+        self.MSE_ic_2 = tf.reduce_mean(tf.square(ic_2(self)))
+        self.MSE_ic_1 = tf.reduce_mean(tf.square(ic_1(self)))
+        
+                
+        return  self.MSE_u + self.MSE_n + self.MSE_ru + self.MSE_rn + self.MSE_ic_1 + self.MSE_ic_2
+
+    def lossU(self):
+        return self.MSE_u
+    
+    def lossN(self):
+        return self.MSE_n
+        
+    def lossIC(self):
+        return self.MSE_ic_1 + self.MSE_ic_2
+    
+    def lossR(self):
+        return self.MSE_rn + self.MSE_ru
