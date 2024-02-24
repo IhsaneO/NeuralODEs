@@ -1,0 +1,18 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def Plot_Expectation(t, u, prediction, label, num_epochs):
+    plt.plot(t, u, label='Actual Values')
+    plt.plot(t, prediction, label='NN Expectations')
+    plt.title('FN equations in 0D with ' + str(num_epochs) + ' epochs')
+    plt.xlabel('Time t')
+    plt.ylabel(label) 
+    plt.legend()
+    
+def Plot_Loss(loss_array, label, num_epochs):
+    x = np.arange(0, num_epochs, 1)
+    plt.plot(x, loss_array, label = label)
+    plt.title('Loss of the Neural Network')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss') 
+    plt.legend()
