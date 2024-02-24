@@ -14,13 +14,13 @@ from Test import *
 save = True
 
 # Loading data 
-Training_u = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/u_training.csv')
-Training_n = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/n_training.csv')
-Training_T = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/t_training.csv')
+Training_u = Formatt_data('./0.1-125/u_training.csv')
+Training_n = Formatt_data('./0.1-125/n_training.csv')
+Training_T = Formatt_data('./0.1-125/t_training.csv')
 
-Test_u = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/u_test.csv')
-Test_n = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/n_test.csv')
-Test_T = Formatt_data('/Users/ihsan/Desktop/Lectures/2021-2022/Final Year Project/Dataset/0.1-125/t_test.csv')
+Test_u = Formatt_data('./0.1-125/u_test.csv')
+Test_n = Formatt_data('./0.1-125/n_test.csv')
+Test_T = Formatt_data('./0.1-125/t_test.csv')
 
 # Creating dataloader for training 
 
