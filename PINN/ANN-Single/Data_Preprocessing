@@ -1,0 +1,9 @@
+import numpy as np
+import pandas as pd
+import torch
+
+def Formatt_data(data_pth):
+    
+    raw = pd.read_csv(data_pth, header=None).to_numpy()
+
+    return torch.Tensor(raw)
