@@ -1,0 +1,28 @@
+import tensorflow as tf
+import numpy as np
+
+def Test(dataloader, array_u, array_n, model_u, model_n):
+       
+        for data in dataloader:
+            
+            # get the inputs; data is a list of [inputs, labels]
+       
+            inputs, label_u, label_n = data
+       
+            # zero the parameter gradients
+           
+            inputs = tf.convert_to_tensor(inputs.numpy())
+            label_u = tf.convert_to_tensor(label_u.numpy())
+            label_n = tf.convert_to_tensor(label_n.numpy())
+        
+            # get the outputs of the NN
+            
+            prediction_u = model_u(inputs)
+            prediction_n = model_n(inputs)
+            
+            prediction_u = np.ndarray.item(prediction_u.numpy())
+            prediction_n = np.ndarray.item(prediction_n.numpy())
+            
+            array_u.append(prediction_u)
+            array_n.append(prediction_n)
+
